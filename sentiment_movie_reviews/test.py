@@ -5,6 +5,8 @@ import theano.tensor as T
 import os
 import lasagne
 import cPickle
+import sys
+sys.path.append("../")
 import networks
 import argparse
 import codecs
