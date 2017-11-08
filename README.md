@@ -57,3 +57,19 @@ Finally, for obtaining the test result we need to select the model we have train
 ```
 THEANO_FLAGS=device=gpu0,floatX=float32 python test.py --settings_name sentiment_glove.840B.300d.nltk_nounk_settings_DATE
 ```
+
+## Word-level language modeling
+The word-level language modeling experiments are executed on the Penn Treebank dataset.
+Typically, the standard splits of Mikolov et al. 2012 are used.
+The files are already uploaded in data/word_language_modeling/ptb/ folder.
+
+For reproducing the result of Zaremba et al. 2014.
+```
+THEANO_FLAGS=device=gpu0,floatX=float32 python train.py --rnn_type lstm --rec_num_units 650 --embedding_size 650 --decay 0.83333 --model_seq_len 35 --max_grad_norm 5
+```
+
+
+
+
+
+

@@ -29,7 +29,7 @@ def densely_connected(sym_x,sym_mask,paras,input_matrix):
     for i in range(paras["number_of_rnn_layers"]):
 
         if paras["rnn_type"] == "lstm":
-            l_rec1 = lasagne.layers.LSTMLayer(
+            l_rec1 = layers.lstm_layers.LSTMLayer(
                 l_emb,
                 num_units=paras["rec_num_units"],
                 ingate=create_gate(),
@@ -46,9 +46,9 @@ def densely_connected(sym_x,sym_mask,paras,input_matrix):
                                                      input_var=sym_mask),
             )
         elif paras["rnn_type"] == "qrnn" or paras["rnn_type"] == "drelu" or paras["rnn_type"] == "delu":
-            l_rec1 = layers.QRNNBlockSimplified(l_emb, paras, i,
+            l_rec1 = layers.QRNNBlock(l_emb, paras, i,
                                          mask=lasagne.layers.InputLayer((paras["batch_size"], paras["model_seq_len"]),
-                                                     input_var=sym_mask))
+                                                     input_var=sym_mask),hids=None)[0]
 
             if i == (paras["number_of_rnn_layers"]-1):
                 l_rec1 = lasagne.layers.SliceLayer(l_rec1,-1,axis=1)

@@ -30,10 +30,11 @@ class ELU(object):
 
         return direction*theano.tensor.switch(x > 0, x, self.alpha * theano.tensor.expm1(x))
 
-class ResQRNNLayer(MergeLayer):
+class QRNNLayer(MergeLayer):
 
 
-    def __init__(self, incoming,gate_pos, num_units,seq_len=0,
+    def __init__(self, incoming,gate_pos, num_units,
+                 seq_len=0,
                  cell_init=init.Constant(0.),
                  backwards=False,
                  learn_init=False,
@@ -61,7 +62,7 @@ class ResQRNNLayer(MergeLayer):
             self.mask_incoming_index = len(incomings)-1
 
         # Initialize parent layer
-        super(ResQRNNLayer, self).__init__(incomings, **kwargs)
+        super(QRNNLayer, self).__init__(incomings, **kwargs)
 
 
         self.learn_init = learn_init
@@ -244,28 +245,28 @@ class ResQRNNLayer(MergeLayer):
 
         return cell_out,temp_out
 
-def QRNNBlockSimplified(l_in,paras,i,mask):
+def QRNNBlock(l_in,paras,i,mask,hids):
 
 
-    if i==0:
+    if i == 0:
         input_size = paras["embedding_size"]
     else:
-        if paras["dense"]:
+        if "dense" in paras and paras["dense"]:
             input_size = paras["embedding_size"] + i*paras["rec_num_units"]
         else:
             input_size = paras["rec_num_units"]
 
-    l_in = lasagne.layers.PadLayer(l_in,((paras["k"][i]-1,0),(0,0)),batch_ndim=1)
+    if hids == None:
+        # if no hids are passed, we are in the single sentence case and need to pad the input ourself
+        l_in = lasagne.layers.PadLayer(l_in,((paras["k"][i]-1,0),(0,0)),batch_ndim=1)
 
 
     l_emb_reshaped = lasagne.layers.ReshapeLayer(l_in, (
         paras["batch_size"], 1, -1, input_size))
 
-    init_f = eval(paras["init_W"])
-
     l_conv_gates_rec = lasagne.layers.Conv2DLayer(l_emb_reshaped,  paras["rec_num_units"],
-                                               (paras["k"][i], input_size), pad="valid", W=init_f,
-                                               b=eval(paras["init_b"]), untie_biases=False,
+                                               (paras["k"][i], input_size), pad="valid", W=eval(paras["init_W"]),
+                                               b=eval(paras["init_b"]), untie_biases=paras["untie_biases"],
                                                nonlinearity=nonlinearities.identity,name="forget_gate")
 
     if paras["batch_norm"]==1:
@@ -278,8 +279,8 @@ def QRNNBlockSimplified(l_in,paras,i,mask):
     if paras["rnn_type"] == "qrnn":
 
         l_conv_input = lasagne.layers.Conv2DLayer(l_emb_reshaped, paras["rec_num_units"], (paras["k"][i], input_size),
-                                                   pad="valid", W=init_f, b=eval(paras["init_b"]),
-                                                   untie_biases=False, nonlinearity=eval(paras["input_act"]),name="input_1")
+                                                   pad="valid", W=eval(paras["init_W"]), b=eval(paras["init_b"]),
+                                                   untie_biases=paras["untie_biases"], nonlinearity=eval(paras["input_act"]),name="input_1")
 
         if paras["batch_norm"] > 0:
             l_conv_input = lasagne.layers.batch_norm(l_conv_input,gamma=lasagne.init.Constant(0.1))
@@ -294,11 +295,11 @@ def QRNNBlockSimplified(l_in,paras,i,mask):
             act2 = neg_rectify
 
         l_conv_input1 = lasagne.layers.Conv2DLayer(l_emb_reshaped, paras["rec_num_units"], (paras["k"][i], input_size),
-                                                   pad="valid", W=init_f, b=eval(paras["init_b"]),
-                                                   untie_biases=False, nonlinearity=act1, name="input_1")
+                                                   pad="valid", W=eval(paras["init_W"]), b=eval(paras["init_b"]),
+                                                   untie_biases=paras["untie_biases"], nonlinearity=act1, name="input_1")
         l_conv_input2 = lasagne.layers.Conv2DLayer(l_emb_reshaped, paras["rec_num_units"], (paras["k"][i], input_size),
-                                                   pad="valid", W=init_f, b=eval(paras["init_b"]),
-                                                   untie_biases=False, nonlinearity=act2, name="input_2")
+                                                   pad="valid", W=eval(paras["init_W"]), b=eval(paras["init_b"]),
+                                                   untie_biases=paras["untie_biases"], nonlinearity=act2, name="input_2")
 
         if paras["batch_norm"] > 0:
             l_conv_input1 = lasagne.layers.batch_norm(l_conv_input1, gamma=lasagne.init.Constant(0.5))
@@ -310,11 +311,19 @@ def QRNNBlockSimplified(l_in,paras,i,mask):
 
     l_conv_input_gated = lasagne.layers.ElemwiseMergeLayer([l_conv_input, l_conv_gates_rec_input], T.mul)
 
-    l_rec1_cells = ResQRNNLayer(
+
+    if hids == None:
+        cell_init = lasagne.init.Constant(0)
+    else:
+        cell_init = lasagne.layers.InputLayer((paras["batch_size"], paras["rec_num_units"]),
+                                            input_var=hids[2 * i + 1])
+
+    l_rec1_cells = QRNNLayer(
         l_conv_input_gated,l_conv_gates_rec_hidden,
         num_units=paras["rec_num_units"],
         learn_init=False,
         mask_input=mask,
+        cell_init = cell_init
     )
 
     l_rec_1 = custom_layers.SelectOutputLayer(l_rec1_cells,0)
@@ -324,7 +333,7 @@ def QRNNBlockSimplified(l_in,paras,i,mask):
         init_f = eval(paras["init_W"])
         l_conv_gates_out = lasagne.layers.Conv2DLayer(l_emb_reshaped, paras["rec_num_units"],
                                                       (paras["k"][i], input_size), pad="valid", W=init_f,
-                                                      b=eval(paras["init_b"]), untie_biases=False,
+                                                      b=eval(paras["init_b"]), untie_biases=paras["untie_biases"],
                                                       nonlinearity=nonlinearities.identity, name="out_gate")
 
         if paras["batch_norm"]==1:
@@ -342,7 +351,7 @@ def QRNNBlockSimplified(l_in,paras,i,mask):
         l_rec1_hids = l_rec_1
 
 
-    return l_rec1_hids
+    return l_rec1_hids, l_rec_1
 
 
 

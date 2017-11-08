@@ -29,6 +29,7 @@ parser.add_argument("--rec_num_units", type=int, default=256, help="number of LS
 parser.add_argument("--dropout_frac", type=float, default=0.3, help="optional recurrent dropout")
 parser.add_argument("--L2_reg", type=float, default=0.000004, help="L2 regularization")
 parser.add_argument("--peepholes", type=int, default=0, help="Peephole connections in LSTM")
+parser.add_argument("--untie_biases", type=int, default=0, help="Biases of QRNN")
 parser.add_argument("--number_of_rnn_layers", type=int, default=4, help="Number of rnn layers")
 parser.add_argument("--dense", type=int, default=1, help="densely connected or not")
 parser.add_argument("--rnn_type", type=str, default="delu", help="lstm, qrnn, drelu, delu")
