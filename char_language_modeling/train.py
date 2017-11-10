@@ -10,7 +10,7 @@ import cPickle
 import sys
 sys.path.append('../')
 import prepare_data
-import networks
+import char_language_modeling.networks as networks
 import argparse
 import sys
 import codecs
@@ -22,38 +22,36 @@ np.random.seed(2345)
 parser = argparse.ArgumentParser(description='Train word-level language model with LSTM/QRNN.')
 
 # word level specs
-parser.add_argument("--model_seq_len", type=int, default=105, help="How many steps to unroll")
-parser.add_argument("--init_W", type=str, default="lasagne.init.Normal(0.1)", help="Initial parameter values")
-parser.add_argument("--init_b", type=str, default="lasagne.init.Constant(0)", help="Initial parameter values")
-parser.add_argument("--input_act", type=str, default="lasagne.nonlinearities.tanh", help="Activations of RNN")
-parser.add_argument("--gate_act", type=str, default="lasagne.nonlinearities.sigmoid", help="Gate activations of RNN")
-parser.add_argument("--rec_num_units", type=int, default=640, help="Number of hidden units")
-parser.add_argument("--embedding_size", type=int, default=640, help="Embedding size")
-parser.add_argument("--dropout_frac", type=float, default=0.5, help="optional recurrent dropout")
+parser.add_argument("--model_seq_len", type=int, default=100, help="how many steps to unroll")
+parser.add_argument("--init_W", type=str, default="lasagne.init.Orthogonal(0.5)", help="initial parameter values")
+parser.add_argument("--init_b", type=str, default="lasagne.init.Constant(0.0)", help="initial parameter values")
+parser.add_argument("--input_act", type=str, default="lasagne.nonlinearities.tanh", help="activations of RNN")
+parser.add_argument("--gate_act", type=str, default="lasagne.nonlinearities.sigmoid", help="gate activations of RNN")
+parser.add_argument("--rec_num_units", type=int, default=250, help="number of LSTM units")
+parser.add_argument("--embedding_size", type=int, default=50, help="Embedding size")
+parser.add_argument("--dropout_frac", type=float, default=0.15, help="optional recurrent dropout")
 parser.add_argument("--peepholes", type=int, default=0, help="Peephole connections in LSTM")
 parser.add_argument("--untie_biases", type=int, default=1, help="Biases of QRNN")
-parser.add_argument("--number_of_rnn_layers", type=int, default=2, help="How many RNNs will be stacked")
-parser.add_argument("--k", type=int, default=[2, 2], nargs="+", help="Filter size in convolution")
+parser.add_argument("--number_of_rnn_layers", type=int, default=4, help="How many RNNs will be stacked")
+parser.add_argument("--k", type=int, default=[6, 2, 2, 2], nargs="+", help="Filter size in convolution")
 parser.add_argument("--pooling", type=str, default="fo", help="f, fo")
-parser.add_argument("--batch_norm", type=int, default=0, help="Batch norm")
-parser.add_argument("--rnn_type", type=str, default="drelu", help="Type of model to train: lstm,qrnn,drelu,delu")
+parser.add_argument("--batch_norm", type=int, default=1, help="Batch norm")
+parser.add_argument("--rnn_type", type=str, default="drelu", help="lstm,qrnn,drelu,delu")
 parser.add_argument("--elu_alpha", type=float, default=0.1, help="Elu alpha value")
 
 # training
-parser.add_argument("--batch_size", type=int, default=20, help="Batch size")
-parser.add_argument("--lr", type=float, default=1, help="Learning rate")
-parser.add_argument("--optimizer", type=str, default="lasagne.updates.sgd", help="Optimizer function: sgd, adam...")
-parser.add_argument("--decay", type=float, default=0.95, help="Decay factor")
-parser.add_argument("--no_decay_epochs", type=float, default=6, help="Run this many epochs before first decay")
-parser.add_argument("--max_grad_norm", type=float, default=10, help="Scale steps if norm is above this value")
+parser.add_argument("--batch_size", type=int, default=128, help=" batch size")
+parser.add_argument("--lr", type=float, default=0.0003, help="learning rate")
+parser.add_argument("--optimizer", type=str, default="lasagne.updates.adam", help="Optimizer function: sgd, adam...")
 parser.add_argument("--grad_clip", type=float, default=0, help="Grad clipping value")
-parser.add_argument("--num_epochs", type=int, default=100, help="Number of epochs to run")
-parser.add_argument("--tol", type=float, default=1e-6, help="Numerical stability")
+parser.add_argument("--num_epochs", type=int, default=300, help="Number of epochs to run")
+parser.add_argument("--tol", type=float, default=1e-6, help="numerical stability")
 parser.add_argument("--L2_reg", type=float, default=0, help="L2 regularization")
 parser.add_argument("--L1_reg", type=float, default=0, help="L1 regularization")
 # data
-parser.add_argument("--save_file", type=str, default="lm",help="Prefix for models")
-parser.add_argument("--save_dir", type=str, default="../models/word_language_modeling/",help="Folder for storing all models")
+parser.add_argument("--save_file", type=str, default="lm_char")
+parser.add_argument("--save_dir", type=str, default="../models/char_language_modeling/")
+parser.add_argument("--dataset",type=str,default="ptb",help="ptb or hutter")
 args = parser.parse_args()
 paras = vars(args)
 
@@ -64,20 +62,23 @@ else:
     paras["k"] = paras["k"] * paras["number_of_rnn_layers"]
 
 # load data
-train, valid, test, vocab_map, vocab_idx = prepare_data.getdata()
+if paras["dataset"]=="hutter":
+    train, valid, test = prepare_data.getdata_hutter()
+    paras["vocab_size"] = 205
+else:
+    train, valid, test, vocab_map = prepare_data.getdata()
+    paras["vocab_size"] = 49
 
 # pad data
 if paras["rnn_type"] == "lstm":
     context = 1
 else:
     context = paras["k"][0]
-x_train, y_train = prepare_data.reorder(train, paras["batch_size"], paras["model_seq_len"], context=context - 1)
-x_valid, y_valid, mask_valid = prepare_data.reorder(valid, paras["batch_size"], paras["model_seq_len"], padding=True,
-                                                    context=context - 1)
-x_test, y_test, mask_test = prepare_data.reorder(test, paras["batch_size"], paras["model_seq_len"], padding=True,
-                                                 context=context - 1)
 
-paras["vocab_size"] = vocab_idx[0]
+x_train,y_train = prepare_data.reorder(train,paras["batch_size"],paras["model_seq_len"],context=paras["k"][0]-1)
+x_valid,y_valid,mask_valid = prepare_data.reorder(valid,paras["batch_size"],paras["model_seq_len"],padding=True,context=paras["k"][0]-1)
+x_test,y_test,mask_test = prepare_data.reorder(test,paras["batch_size"],paras["model_seq_len"],padding=True,context=paras["k"][0]-1)
+
 
 print("-" * 80)
 print("Vocab size: ", (paras["vocab_size"]))
@@ -118,17 +119,17 @@ eval_out = lasagne.layers.get_output(
 hids_out_eval = eval_out[1:]
 eval_out = eval_out[0]
 
-cost_train = T.mean(networks.calc_cross_ent(train_out, sym_y, paras))
+cost_train = T.mean(networks.calc_cross_ent_bpc(train_out, sym_y, paras))
 if paras["L2_reg"] > 0:
     cost_train += paras["L2_reg"] * regularize_layer_params(l_out, l2)
 if paras["L1_reg"] > 0:
     cost_train += paras["L1_reg"] * regularize_layer_params(l_out, l1)
-cost_eval = networks.calc_cross_ent(eval_out, sym_y, paras)
+cost_eval = networks.calc_cross_ent_bpc(eval_out, sym_y, paras)
 
 all_params = lasagne.layers.get_all_params(l_out, trainable=True)
+grads = lasagne.updates.get_or_compute_grads(cost_train, all_params)
 
-updates, norm = networks.gradient_updates(cost_train, all_params, paras, sh_lr,
-                                          update_function=eval(paras["optimizer"]))
+updates = eval(paras["optimizer"])(grads, all_params, learning_rate=sh_lr)
 
 print("compiling f_eval...")
 fun_inp = [sym_x, sym_y]
@@ -144,7 +145,7 @@ f_eval = theano.function(fun_inp, outs)
 
 print("compiling f_train...")
 
-outs = [cost_train, norm]
+outs = [cost_train]
 outs.extend(hids_out_train)
 
 f_train = theano.function(fun_inp, outs, updates=updates)
@@ -165,7 +166,7 @@ corresponding_train_perplexity = sys.maxint
 for epoch in range(paras["num_epochs"]):
 
     # prepare hidden states that will be passed
-    l_cost, l_norm, batch_time = [], [], time.time()
+    l_cost, batch_time = [],  time.time()
     hids = []
 
     if paras["rnn_type"] == "lstm":
@@ -198,36 +199,29 @@ for epoch in range(paras["num_epochs"]):
         input.extend(hids)
         all = eval(function_str)
         cost = all[0]
-        norm = all[1]
-        hids = all[2: 2 + len(hids)]
+        hids = all[1: 1 + len(hids)]
 
         l_cost.append(cost)
-        l_norm.append(norm)
+
 
         if i % 100 == 0 and i > 0:
-            print("Iteration: %s, perplexity %s" % (i, np.exp(np.sum(l_cost) / len(l_cost))))
+            print("Iteration: %s, BPC %s" % (i, (np.sum(l_cost) / len(l_cost))))
 
     elapsed = time.time() - batch_time
     words_per_second = float(paras["batch_size"] * (paras["model_seq_len"]) * len(l_cost)) / elapsed
-    perplexity_valid = networks.calc_perplexity_variable(x_valid, y_valid, paras, f_eval, padding=mask_valid)
-    perplexity_train = np.exp(np.sum(l_cost) / len(l_cost))
+    perplexity_valid = networks.calc_bpc_variable(x_valid, y_valid, paras, f_eval, padding=mask_valid)
+    perplexity_train = np.sum(l_cost) / len(l_cost)
 
     print("Epoch           : ", (epoch))
-    print("Perplexity train: ", (perplexity_train))
-    print("Perplexity valid: ", (perplexity_valid))
-    print("Norm            : ", (sum(l_norm) / n_batches_train))
+    print("BPC train: ", (perplexity_train))
+    print("BPC valid: ", (perplexity_valid))
     print("Words per second: ", (words_per_second))
 
-    if epoch >= (paras["no_decay_epochs"] - 1):
-        current_lr = sh_lr.get_value()
-        new_lr = current_lr * float(paras["decay"])
-        sh_lr.set_value(lasagne.utils.floatX(new_lr))
-        print("----New Learning Rate: " + str(new_lr))
 
     last_perplexity = perplexity_valid
 
     if perplexity_valid < best_valid_perplexity:
-        print("----New best perplexity: " + str(perplexity_valid))
+        print("----New best BPC: " + str(perplexity_valid))
         best_valid_perplexity = perplexity_valid
         corresponding_train_perplexity = perplexity_train
 

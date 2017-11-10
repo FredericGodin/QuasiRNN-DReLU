@@ -17,7 +17,7 @@ np.random.seed(2345)
 
 #  SETTINGS
 parser = argparse.ArgumentParser(description='Evaluate Sentiment Dataset.')
-parser.add_argument("--settings_name", type=str,default="sentiment_glove.840B.300d.nltk_nounk_settings_01_Nov_2017_17_33_10",help="settings_file")
+parser.add_argument("--settings_name", type=str,required=True,help="settings_file")
 parser.add_argument("--model_folder", type=str,default="../models/sentiment_movie_reviews/",help="settings_file")
 test_paras = vars(parser.parse_args())
 

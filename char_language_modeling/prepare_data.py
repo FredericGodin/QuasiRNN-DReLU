@@ -1,64 +1,71 @@
-import os
-import gzip
+
 import codecs
+import gzip
+import os
 import numpy as np
-
-folder_ptb = '../data/language_modeling/ptb/'
-
-def load_data(file_name, vocab_map, vocab_idx,gzipped=True,eow=True,prob=False):
-    """
-    Loads Penn Tree files downloaded from https://github.com/wojzaremba/lstm
-
-    Notes
-    -----
-    This is python port of the LUA function load_data in
-    https://github.com/wojzaremba/lstm/blob/master/data.lua
-
-    Based on the orginal lasagne recipes implementation
+import cPickle
 
 
-    """
+folder_hutter = '../data/hutter/'
+
+def getdata(folder_ptb = "../data/language_modeling/ptb/",vocab_map = {}):
+
+    train = load_data(os.path.join(folder_ptb,"ptb.train.txt.gz"),vocab_map, train=True)
+    valid = load_data(os.path.join(folder_ptb,"ptb.valid.txt.gz"),vocab_map, train=False)
+    test= load_data(os.path.join(folder_ptb,"ptb.test.txt.gz"),vocab_map, train=False)
+
+    return train,valid,test,vocab_map
+
+
+def getdata_hutter(folder_hutter = "../data/language_modeling/hutter/"):
+
+    with open(os.path.join(folder_hutter,"hutter_train.npy"),"rb") as f:
+        train = np.load(f)
+    with open(os.path.join(folder_hutter,"hutter_valid.npy"),"rb") as f:
+        valid = np.load(f)
+    with open(os.path.join(folder_hutter,"hutter_test.npy"),"rb") as f:
+        test = np.load(f)
+
+    return train,valid,test
+
+def load_data(file_name, vocab_map, gzipped=True,train=True):
+
     def process_line(line):
-        line = line.strip()
-        words = line.split(" ")
-        if words[-1] == "":
-            del words[-1]
-        if eow:
-            words.append("<eos>")
-        return words
+
+        return list(line[:-2])
 
     words = []
+    len_total = 0
     if gzipped:
         with gzip.open(file_name, 'rb') as f:
             for line in f.readlines():
-                words += process_line(line)
+                new_words = process_line(line)
+                len_total += len(new_words)
+                words += new_words
+                #
+                # if len_total > 64000:
+                #     break
     else:
         with codecs.open(file_name, 'r',"UTF-8") as f:
             for line in f.readlines():
                 words += process_line(line)
 
     n_words = len(words)
-    print("Loaded %i words from %s" % (n_words, file_name))
+    print("Loaded %i chars from %s" % (n_words, file_name))
 
     x = np.zeros(n_words)
+    vocab_idx=0
     for wrd_idx, wrd in enumerate(words):
         if wrd not in vocab_map:
-            vocab_map[wrd] = vocab_idx[0]
-            vocab_idx[0] += 1
+            if train:
+                vocab_map[wrd] = vocab_idx
+                vocab_idx += 1
+            else:
+                print("new char?")
         x[wrd_idx] = vocab_map[wrd]
 
 
-
-    counts = np.zeros((len(vocab_map),),dtype=np.float32)
-
-    for wrd_idx, wrd in enumerate(words):
-            counts[vocab_map[wrd]]+=1
-
-    if prob:
-        return x.astype('int32'), counts/len(words)
-    else:
-        return x.astype('int32'), None
-
+    return x.astype('int32')
 
 def reorder(x_in, batch_size, model_seq_len,padding=False,context=0):
     """
@@ -80,6 +87,17 @@ def reorder(x_in, batch_size, model_seq_len,padding=False,context=0):
 
     Also creates targets. In language modelling the target is to predict the
     next word in the sequence.
+
+    Parameters
+    ----------
+    x_in : 1D numpy.array
+    batch_size : int
+    model_seq_len : int
+        number of steps the model is unrolled
+
+    Returns
+    -------
+    reordered x_in and reordered targets. Targets are shifted version of x_in.
 
     """
     if x_in.ndim != 1:
@@ -142,18 +160,5 @@ def reorder(x_in, batch_size, model_seq_len,padding=False,context=0):
         return x_out.astype('int32'), targets.astype('int32')
 
 
-def prepare_data(vocab_map, vocab_idx,filename,folder,prob=False):
-    x = load_data(os.path.join(folder, filename),
-                  vocab_map, vocab_idx,prob=prob)
-    return x
 
-def getdata(vocab_map = {},prob=False):
-    vocab_idx = [0]
-    train,train_prob = prepare_data(vocab_map, vocab_idx, "ptb.train.txt.gz",folder_ptb,prob=prob)
-    valid,_ = prepare_data(vocab_map, vocab_idx, "ptb.valid.txt.gz",folder_ptb)
-    test,_ = prepare_data(vocab_map, vocab_idx, "ptb.test.txt.gz",folder_ptb)
 
-    if prob:
-        return train,valid,test,vocab_map,vocab_idx,train_prob
-    else:
-        return train,valid,test,vocab_map,vocab_idx

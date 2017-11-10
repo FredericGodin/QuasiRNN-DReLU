@@ -171,7 +171,7 @@ for epoch in range(paras["num_epochs"]):
         print("----New best accuracy: " + str(acc_valid))
         best_valid_acc = acc_valid
 
-        with open(os.path.join(paras["save_dir"], save_file_model + "_best"), 'w') as f:
+        with open(os.path.join(paras["save_dir"], save_file_model + "_best"), 'wb') as f:
             cPickle.dump(lasagne.layers.get_all_param_values(l_out), f,
                          cPickle.HIGHEST_PROTOCOL)
 
