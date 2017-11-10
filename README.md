@@ -63,11 +63,11 @@ THEANO_FLAGS=device=gpu0,floatX=float32 python test.py --settings_name sentiment
 ## Word-level language modeling
 The word-level language modeling experiments are executed on the Penn Treebank dataset.
 Typically, the standard splits of Mikolov et al. 2012 are used.
-The files are already available in data/language_modeling/ptb/ folder.
+The files are already available in data/language_modeling/ptb/ .
 
 From within the word_language_modeling folder, execute the following commands:
 
-For reproducing the result of Zaremba et al. 2014.
+For reproducing the result of [Zaremba et al. 2014](https://arxiv.org/abs/1409.2329).
 ```
 THEANO_FLAGS=device=gpu0,floatX=float32 python train.py --rnn_type lstm --rec_num_units 650 --embedding_size 650 --decay 0.83333 --model_seq_len 35 --init_W "lasagne.init.Uniform(0.05)" --init_b "lasagne.init.Uniform(0.05)"
 ```
@@ -85,13 +85,15 @@ THEANO_FLAGS=device=gpu0,floatX=float32 python test.py --settings_name lm_settin
 
 ## Character-level language modeling
 The character-level language modeling experiments are executed both on the Penn Treebank dataset and the enwik8/Hutter Prize dataset.
-#### Penn Treebank dataset
+### Penn Treebank dataset
 The following parameters are of interest for reproducing the results:
 
   * --rnn_type qrnn, drelu or delu
   * --rec_num_units 250, 500 or 1000 (or any other number)
   * --number_of_rnn_layers 2, 4, 6 (or any other number)
   * --k 6,2 (if there are 4 layers, this would be 6,2,2,2)
+
+All commands should be executed from the char_language_modeling folder.
 
 For example a DReLU QRNN with 4 layers and 250 hidden units per layer would be.
 ```
@@ -105,7 +107,7 @@ THEANO_FLAGS=device=gpu0,floatX=float32 python test.py --settings_name lm_char_s
 
 
 
-#### Hutter Prize dataset
+### Hutter Prize dataset
 Download the [Hutter Prize dataset](http://mattmahoney.net/dc/enwik8.zip) and unzip in the folder data/language_modeling/hutter/.
 
 ```
